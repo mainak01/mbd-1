@@ -1,0 +1,123 @@
+#!/usr/bin/env python
+from __future__ import print_function
+from optparse import OptionParser
+from glob import glob
+from contextlib import contextmanager
+import subprocess
+import os
+import json
+import stat
+import sys
+
+
+@contextmanager
+def cd(path):
+    cwd = os.getcwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(cwd)
+
+
+def configure(opts, env):
+    blddir = opts.blddir
+    with cd(opts.srcdir):
+        fortran_files = glob('*.f90')
+    srcdir = os.path.relpath(opts.srcdir, blddir)
+    fortran_tasks = {}
+    fobjs = []
+    for filename in fortran_files:
+        stem, _ = os.path.splitext(os.path.basename(filename))
+        objfile = stem + '.o'
+        fobjs.append(objfile)
+        filepath = os.path.join(srcdir, filename)
+        if filename == 'mbd_interface.f90':
+            fc = env['MPIFC']
+        else:
+            fc = env['FC']
+        fortran_tasks[filename] = {
+            'source': filepath,
+            'args': [fc, '-c', '-o', objfile] + env['FFLAGS'].split()
+        }
+    so_extension = subprocess.Popen([
+        opts.python,
+        '-c',
+        'import sys, sysconfig; sys.stdout.write(sysconfig.get_config_var("SO"))'
+    ], stdout=subprocess.PIPE).communicate()[0].decode().strip()
+    env.update({
+        'FOBJS': ' '.join(fobjs),
+        'SRCDIR': srcdir,
+        'BLDDIR': blddir,
+        'BLDDIRABS': os.path.abspath(blddir),
+        'PREFIX': opts.prefix,
+        'MAINDIR': os.path.relpath(os.getcwd(), blddir),
+        'PYTHONMODULE': '_mbd' + so_extension,
+        'PYTHON': opts.python,
+        'LINKFLAG': opts.link
+    })
+    with open('build.mk') as f:
+        makefile = f.read()
+    if not os.path.isdir(blddir):
+        os.mkdir(blddir)
+    with open(os.path.join(blddir, 'Makefile'), 'w') as f:
+        for varname, value in env.items():
+            f.write('{0} = {1}\n'.format(varname, value))
+        f.write('\n')
+        f.write(makefile)
+    with open(os.path.join(blddir, 'config.json'), 'w') as f:
+        json.dump({
+            'fcompile': fortran_tasks,
+            'env': env
+        }, f)
+    with open('Makefile.in') as f:
+        makefile = f.read()
+    with open('Makefile', 'w') as f:
+        f.write('# Generated automatically by ./configure from Makefile.in\n\n')
+        f.write(makefile.format(**env))
+
+
+def get_defaults():
+    opts = {}
+    env = {
+        'FC': 'gfortran',
+        'MPIFC': 'mpifort',
+        'FFLAGS': '-Og -fcheck=all'
+    }
+    if sys.platform == 'darwin':
+        opts.update({
+            'link': '-Wl,-undefined,dynamic_lookup -shared -framework Accelerate'
+        })
+    return opts, env
+
+
+def main(argv=sys.argv[1:]):
+    opts, env = get_defaults()
+    parser = OptionParser(usage='usage: ./configure [options] [VAR=VALUE...]')
+    parser.add_option('--enable-python', action='store_true', help='compile Python module')
+    parser.add_option('--python', default='python', help='python interpreter [default: %default]')
+    parser.add_option('--srcdir', default='src', help='source directory [default: %default]')
+    parser.add_option('--blddir', default='_build', help='build directory [default: %default]')
+    parser.add_option('--prefix', default='.', help='install directory [default: %default]')
+    parser.add_option('--link', default=opts.get('link'), help='link flag [default: %default]')
+    opts, args = parser.parse_args(argv)
+    env.update(dict(arg.split('=', 1) for arg in args))
+    configure(opts, env)
+
+
+config_status = """\
+#!/usr/bin/env python
+import imp
+
+configure = imp.new_module('configure')
+with open('./configure') as f:
+    exec(compile(f.read(), 'configure', 'exec'), configure.__dict__)
+configure.main({argv!r})
+"""
+
+if __name__ == '__main__':
+    if not (len(sys.argv) == 2 and sys.argv[1] in ['-h', '--help']):
+        with open('config.status', 'w') as f:
+            f.write(config_status.format(argv=sys.argv[1:]))
+        os.chmod('config.status', os.stat('config.status').st_mode | stat.S_IEXEC)
+    main()

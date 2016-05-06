@@ -1,6 +1,6 @@
-/build
-/*.mod
-/*.so
-/*.dSYM
-/system.mk
+/_build
+/Makefile
+/config.status
+*.so
+*.dylib
 *.pyc

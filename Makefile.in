@@ -1,0 +1,19 @@
+build:
+	@$(MAKE) -C {BLDDIR}
+
+install: build
+	cp {BLDDIR}/{PYTHONMODULE} {PREFIX}/
+
+test: build
+	@cd tests && PYTHONPATH=$$PYTHONPATH:..:{BLDDIRABS} {PYTHON} tests.py
+
+clean:
+	@$(MAKE) -C {BLDDIR} clean
+
+distclean:
+	-rm -r {BLDDIR}
+	-rm Makefile
+
+Makefile: Makefile.in build.mk configure
+	@./config.status
+	@echo Reconfigured MBD.
