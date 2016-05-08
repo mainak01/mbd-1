@@ -27,15 +27,11 @@ def get_ndarray(pointer, shape, dtype=None):
 
 
 class CStructWrapper(object):
-    _cattrs = []
-
-    def __init__(self):
-        self.__dict__['_cobj'] = object()
-
     def __str__(self):
         s = ''
         for key, val in chain(
-            ((attr, getattr(self, attr)) for attr in self.__class__._cattrs),
+            ((attr, getattr(self, attr)) for attr in self._cattrs),
+            ((attr, getattr(self, attr)) for attr in self._farrays),
             self.__dict__.items()
         ):
             if key.startswith('_'):
@@ -48,12 +44,17 @@ class CStructWrapper(object):
         return s.rstrip()
 
     def __getattr__(self, attr):
-        if attr in self.__dict__:
-            return self.__dict__[attr]
         try:
-            return getattr(self.__dict__['_cobj'], attr)
-        except (AttributeError, KeyError):
+            return self.__dict__[attr]
+        except KeyError:
             pass
+        if attr in self._farrays:
+            return get_ndarray(getattr(self._cobj, attr), **self._farrays[attr])
+        if attr in self._cattrs:
+            obj = getattr(self._cobj, attr)
+            if isinstance(obj, ffi.CData) and ffi.typeof(obj) is ffi.typeof('char *'):
+                return ffi.string(obj).decode()
+            return obj
         raise AttributeError(
             "'{0}' object has no attribute '{1}'"
             .format(self.__class__.__name__, attr)
@@ -65,11 +66,8 @@ class CStructWrapper(object):
                 "Cannot set attribute '{0}' of '{1}' object"
                 .format(attr, self.__class__.__name__)
             )
-        try:
-            if hasattr(self._cobj, attr):
-                return setattr(self._cobj, attr, val)
-        except (AttributeError, TypeError):
-            pass
+        if attr in self._cattrs:
+            return setattr(self._cobj, attr, val)
         self.__dict__[attr] = val
 
 
@@ -77,25 +75,58 @@ class Context(CStructWrapper):
     _cattrs = [
         'do_rpa', 'do_reciprocal', 'do_ewald', 'ts_energy_accuracy',
         'ts_shell_thickness', 'dipole_low_dim_cutoff', 'mayer_scaling',
-        'ewald_real_cutoff_scaling', 'ewald_rec_cutoff_scaling',
-        'freq_grid', 'freq_grid_w'
+        'ewald_real_cutoff_scaling', 'ewald_rec_cutoff_scaling'
     ]
+    _farrays = []
 
     def __init__(self, n_grid=20):
         self._cobj = ffi.new('struct Context *')
-        mbd._init_grid(self._cobj, n_grid)
+        mbd._init_ctx(self._cobj, n_grid)
+        self._farrays = {
+            'freq_grid': {'shape': (n_grid,)},
+            'freq_grid_w': {'shape': (n_grid,)}
+        }
 
     def __del__(self):
         mbd._destroy_grid(self._cobj)
 
-    def __getattr__(self, attr):
-        if attr in ['freq_grid', 'freq_grid_w']:
-            return get_ndarray(getattr(self._cobj, attr), (self._cobj.n_freq,))
-        return super(Context, self).__getattr__(attr)
+
+class Damping(CStructWrapper):
+    _cattrs = [
+        'label', 'd', 's_R', 'a', 'beta',
+    ]
+
+    def __init__(self, label, method, xc):
+        self._cobj = ffi.new('struct Damping *')
+        self._label = ffi.new('char[]', label.encode())
+        self._cobj.label = self._label
+        mbd._set_damping_parameters(
+            self._cobj,
+            ffi.new('char[]', method.encode()),
+            ffi.new('char[]', xc.encode())
+        )
+
+    @property
+    def _farrays(self):
+        n = self._cobj.n_atoms
+        return {
+            'alpha_0': {'shape': (n,)},
+            'C6': {'shape': (n,)},
+            'R_vdw': {'shape': (n,)},
+            'overlap': {'shape': (n, n)},
+            'custom': {'shape': (n, n)},
+            'custom_potential': {'shape': (n, n, n, n)}
+        }
 
 
 class Geometry(CStructWrapper):
-    _cattrs = ['is_periodic', 'supercell', 'lattice_vectors', 'vacuum_axes']
+    _cattrs = ['is_periodic']
+    _farrays = {
+        'supercell': {'shape': (3,), 'dtype': int},
+        'lattice_vectors': {'shape': (3, 3)},
+        'vacuum_axes': {'shape': (3,), 'dtype': bool}
+    }
+
     with open(__file__) as f:
         species_data = json.loads(
             next(l for l in f if l.startswith('# species_data:')).split(' ', 2)[-1]
@@ -109,19 +140,13 @@ class Geometry(CStructWrapper):
         self.species = species
         self.coords = np.array(coords, order='F')
         self._cobj.coords = ffi.cast("double *", self.coords.ctypes.data)
-        self.n_atoms = len(self)
+        self._cobj.n_atoms = len(self)
+        self.supercell[:] = 0
+        self.lattice_vectors[:] = 0
+        self.vacuum_axes[:] = False
         if lattice:
             self.lattice_vectors[:] = lattice
             self.is_periodic = True
-
-    def __getattr__(self, attr):
-        if attr == 'supercell':
-            return get_ndarray(getattr(self._cobj, attr), (3,), dtype=int)
-        elif attr == 'lattice_vectors':
-            return get_ndarray(getattr(self._cobj, attr), (3, 3))
-        elif attr == 'vacuum_axes':
-            return get_ndarray(getattr(self._cobj, attr), (3,), dtype=bool)
-        return super(Geometry, self).__getattr__(attr)
 
     def __iter__(self):
         for specie, coord in zip(self.species, self.coords):

@@ -10,7 +10,7 @@ implicit none
 
 private
 
-public :: init_grid, destroy_grid
+public :: init_grid, destroy_grid, set_damping_parameters
 
 real(8), parameter, public :: &
     bohr = 0.529177249d0, &
@@ -18,7 +18,7 @@ real(8), parameter, public :: &
 
 type, public :: Damping_t
     character(len=30) :: label
-    real(8) :: d, s_R, a, beta
+    real(8) :: d = 0.d0, s_R = 0.d0, a = 0.d0, beta = 0.d0
     real(8), pointer :: &
         alpha_0(:) => null(), &
         C6(:) => null(), &
@@ -56,7 +56,7 @@ type, public :: Geometry_t
 end type
 
 type, public :: MBDResults_t
-    real(8) :: energy
+    real(8) :: energy = 0.d0
     logical :: has_error = .false.
     real(8), pointer :: &
         omegas(:) => null(), &

@@ -39,9 +39,10 @@ struct Relay {
 extern int my_task, n_tasks;
 extern double bohr;
 
-void _init_grid(struct Context *ctx, int n);
+void _init_ctx(struct Context *ctx, int n);
 void _destroy_grid(struct Context *ctx);
-void _run_scs(struct Context ctx, struct Geometry geom, double * alpha,
+void _set_damping_parameters(struct Damping *damping, char *method, char *xc);
+void _run_scs(struct Context ctx, struct Geometry geom, double *alpha,
              struct Damping damping, struct Relay alpha_full,
              double lambda, double *k_point);
 double _get_C6_from_alpha(struct Context ctx, double *alpha);
