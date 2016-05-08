@@ -4,13 +4,9 @@ fbuild:
 	@$(MAKE) -C {BLDDIR}
 
 build: fbuild
-	{PYTHON} setup.py --quiet build
-
-devel: fbuild
-	{PYTHON} -m pip install -e .
-
-test: fbuild
 	{PYTHON} setup.py --quiet build_ext --inplace
+
+test:
 	@cd tests && PYTHONPATH=$$PYTHONPATH:.. {PYTHON} tests.py
 
 install: fbuild
