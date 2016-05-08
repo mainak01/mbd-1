@@ -20,7 +20,7 @@ class build_ext(setuptools.command.build_ext.build_ext):
 
 setup(
     name='pymbd',
-    version='0.2.0',
+    version='0.2.dev1',
     url='https://github.com/azag0/mbd',
     author='Jan Hermann',
     author_email='jh@janhermann.cz',
