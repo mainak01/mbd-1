@@ -16,3 +16,8 @@ Configuration options can be listed with
 ```
 ./configure --help
 ```
+To install locally with `pip`, run
+
+```
+make install
+```

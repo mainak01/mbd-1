@@ -1,6 +1,8 @@
-/_build
+/build
 /Makefile
 /config.status
-*.so
-*.dylib
+/setup.cfg
+/egg
 *.pyc
+/*.so
+/*.dylib

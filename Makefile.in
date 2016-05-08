@@ -1,18 +1,29 @@
-build:
+all: build
+
+fbuild:
 	@$(MAKE) -C {BLDDIR}
 
-install: build
-	cp {BLDDIR}/{PYTHONMODULE} {PREFIX}/
+build: fbuild
+	{PYTHON} setup.py --quiet build
 
-test: build
-	@cd tests && PYTHONPATH=$$PYTHONPATH:..:{BLDDIRABS} {PYTHON} tests.py
+devel: fbuild
+	{PYTHON} -m pip install -e .
+
+test: fbuild
+	{PYTHON} setup.py --quiet build_ext --inplace
+	@cd tests && PYTHONPATH=$$PYTHONPATH:.. {PYTHON} tests.py
+
+install: fbuild
+	{PYTHON} -m pip install .
 
 clean:
 	@$(MAKE) -C {BLDDIR} clean
+	{PYTHON} setup.py --quiet clean
 
-distclean:
-	-rm -r {BLDDIR}
-	-rm Makefile
+distclean: clean
+	rm -rf {BLDDIR}
+	rm -f $(wildcard Makefile setup.cfg *.so *.dylib)
+	-rmdir egg
 
 Makefile: Makefile.in build.mk configure
 	@./config.status

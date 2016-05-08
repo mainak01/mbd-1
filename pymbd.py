@@ -1,5 +1,5 @@
 from __future__ import print_function
-from _mbd import ffi, lib as mbd
+from _mbd_backend import ffi, lib as mbd
 from mpi4py import MPI
 import numpy as np
 from itertools import chain

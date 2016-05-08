@@ -3,11 +3,17 @@ from __future__ import print_function
 from optparse import OptionParser
 from glob import glob
 from contextlib import contextmanager
-import subprocess
 import os
 import json
 import stat
 import sys
+if sys.version_info[0] == 2:
+    from ConfigParser import ConfigParser
+else:
+    from configparser import ConfigParser
+
+
+blddir = 'build'
 
 
 @contextmanager
@@ -20,93 +26,90 @@ def cd(path):
         os.chdir(cwd)
 
 
-def configure(opts, env):
-    blddir = opts.blddir
-    with cd(opts.srcdir):
+def configure(opts):
+    with cd('src'):
         fortran_files = glob('*.f90')
-    srcdir = os.path.relpath(opts.srcdir, blddir)
+    srcdir_rel = os.path.relpath('src', blddir)
     fortran_tasks = {}
     fobjs = []
     for filename in fortran_files:
         stem, _ = os.path.splitext(os.path.basename(filename))
         objfile = stem + '.o'
         fobjs.append(objfile)
-        filepath = os.path.join(srcdir, filename)
+        filepath = os.path.join(srcdir_rel, filename)
         if filename == 'mbd_interface.f90':
-            fc = env['MPIFC']
+            fc = opts.mpifc
         else:
-            fc = env['FC']
+            fc = opts.fc
         fortran_tasks[filename] = {
             'source': filepath,
-            'args': [fc, '-c', '-o', objfile] + env['FFLAGS'].split()
+            'args': [fc, '-c', '-o', objfile] + opts.fflags.split()
         }
-    so_extension = subprocess.Popen([
-        opts.python,
-        '-c',
-        'import sys, sysconfig; sys.stdout.write(sysconfig.get_config_var("SO"))'
-    ], stdout=subprocess.PIPE).communicate()[0].decode().strip()
-    env.update({
+    env = {
         'FOBJS': ' '.join(fobjs),
-        'SRCDIR': srcdir,
         'BLDDIR': blddir,
-        'BLDDIRABS': os.path.abspath(blddir),
-        'PREFIX': opts.prefix,
-        'MAINDIR': os.path.relpath(os.getcwd(), blddir),
-        'PYTHONMODULE': '_mbd' + so_extension,
+        'VPATH': srcdir_rel,
         'PYTHON': opts.python,
-        'LINKFLAG': opts.link
-    })
-    with open('build.mk') as f:
-        makefile = f.read()
-    if not os.path.isdir(blddir):
-        os.mkdir(blddir)
-    with open(os.path.join(blddir, 'Makefile'), 'w') as f:
-        for varname, value in env.items():
-            f.write('{0} = {1}\n'.format(varname, value))
-        f.write('\n')
-        f.write(makefile)
-    with open(os.path.join(blddir, 'config.json'), 'w') as f:
-        json.dump({
-            'fcompile': fortran_tasks,
-            'env': env
-        }, f)
+    }
+    config = ConfigParser()
+    config.add_section('egg_info')
+    config.set('egg_info', 'egg-base', 'egg')
+    if not os.path.isdir('egg'):
+        os.mkdir('egg')
+    config.add_section('cffi')
+    config.set('cffi', 'lapack', '-framework Accelerate')
+    config.set('cffi', 'library-dirs', blddir)
+    config.add_section('fortran')
+    config.set('fortran', 'mpifc', 'mpifort')
     with open('Makefile.in') as f:
         makefile = f.read()
     with open('Makefile', 'w') as f:
         f.write('# Generated automatically by ./configure from Makefile.in\n\n')
         f.write(makefile.format(**env))
+    if not os.path.isdir(blddir):
+        os.mkdir(blddir)
+    with open('setup.cfg', 'w') as f:
+        config.write(f)
+    with open('build.mk') as f:
+        makefile = f.read()
+    with open(os.path.join(blddir, 'Makefile'), 'w') as f:
+        for varname, value in env.items():
+            f.write('{0} = {1}\n'.format(varname, value))
+        f.write('\n')
+        f.write(makefile)
+    with open(os.path.join(blddir, 'fcompile.json'), 'w') as f:
+        json.dump(fortran_tasks, f)
 
 
 def get_defaults():
-    opts = {}
-    env = {
-        'FC': 'gfortran',
-        'MPIFC': 'mpifort',
-        'FFLAGS': '-Og -fcheck=all'
+    opts = {
+        'fc': 'gfortran',
+        'mpifc': 'mpifort',
+        'fflags': '-Og -fcheck=all'
     }
     if sys.platform == 'darwin':
         opts.update({
-            'link': '-Wl,-undefined,dynamic_lookup -shared -framework Accelerate'
+            'lapack': '-framework Accelerate'
         })
-    return opts, env
+    return opts
 
 
 def main(argv=sys.argv[1:]):
-    opts, env = get_defaults()
-    parser = OptionParser(usage='usage: ./configure [options] [VAR=VALUE...]')
-    parser.add_option('--enable-python', action='store_true', help='compile Python module')
-    parser.add_option('--python', default='python', help='python interpreter [default: %default]')
-    parser.add_option('--srcdir', default='src', help='source directory [default: %default]')
-    parser.add_option('--blddir', default='_build', help='build directory [default: %default]')
-    parser.add_option('--prefix', default='.', help='install directory [default: %default]')
-    parser.add_option('--link', default=opts.get('link'), help='link flag [default: %default]')
+    opts = get_defaults()
+    parser = OptionParser(usage='usage: ./configure [options] [VAR=VAL...]')
+    parser.add_option('--python', default=sys.executable, help='python interpreter [default: %default]')
+    parser.add_option('--lapack', default=opts.get('lapack'), help='build directory [default: %default]')
+    parser.add_option('--fc', default=opts.get('fc'), help='Fortran compiler [default: %default]')
+    parser.add_option('--mpifc', default=opts.get('mpifc'), help='MPI Fortran compiler [default: %default]')
+    parser.add_option('--fflags', default=opts.get('fflags'), help='Fortran flags [default: %default]')
     opts, args = parser.parse_args(argv)
-    env.update(dict(arg.split('=', 1) for arg in args))
-    configure(opts, env)
+    for var, val in (arg.split('=', 1) for arg in args):
+        os.environ[var] = val
+    configure(opts)
 
 
 config_status = """\
-#!/usr/bin/env python
+#!{executable}
 import imp
 
 configure = imp.new_module('configure')
@@ -118,6 +121,9 @@ configure.main({argv!r})
 if __name__ == '__main__':
     if not (len(sys.argv) == 2 and sys.argv[1] in ['-h', '--help']):
         with open('config.status', 'w') as f:
-            f.write(config_status.format(argv=sys.argv[1:]))
+            f.write(config_status.format(
+                executable=sys.executable,
+                argv=sys.argv[1:]
+            ))
         os.chmod('config.status', os.stat('config.status').st_mode | stat.S_IEXEC)
     main()
