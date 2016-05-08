@@ -7,6 +7,7 @@ import os
 import json
 import stat
 import sys
+from distutils import sysconfig
 if sys.version_info[0] == 2:
     from ConfigParser import ConfigParser
 else:
@@ -57,10 +58,10 @@ def configure(opts):
     if not os.path.isdir('egg'):
         os.mkdir('egg')
     config.add_section('cffi')
-    config.set('cffi', 'lapack', '-framework Accelerate')
+    config.set('cffi', 'lapack', opts.lapack)
     config.set('cffi', 'library-dirs', blddir)
     config.add_section('fortran')
-    config.set('fortran', 'mpifc', 'mpifort')
+    config.set('fortran', 'mpifc', opts.mpifc)
     with open('Makefile.in') as f:
         makefile = f.read()
     with open('Makefile', 'w') as f:
@@ -85,7 +86,7 @@ def get_defaults():
     opts = {
         'fc': 'gfortran',
         'mpifc': 'mpifort',
-        'fflags': '-Og -fcheck=all'
+        'fflags': sysconfig.get_config_var('CCSHARED')
     }
     if sys.platform == 'darwin':
         opts.update({
@@ -103,6 +104,7 @@ def main(argv=sys.argv[1:]):
     parser.add_option('--mpifc', default=opts.get('mpifc'), help='MPI Fortran compiler [default: %default]')
     parser.add_option('--fflags', default=opts.get('fflags'), help='Fortran flags [default: %default]')
     opts, args = parser.parse_args(argv)
+    assert opts.lapack
     for var, val in (arg.split('=', 1) for arg in args):
         os.environ[var] = val
     configure(opts)
