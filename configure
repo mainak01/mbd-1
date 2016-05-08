@@ -50,7 +50,7 @@ def configure(opts):
         'FOBJS': ' '.join(fobjs),
         'BLDDIR': blddir,
         'VPATH': srcdir_rel,
-        'PYTHON': opts.python,
+        'PYTHON': sys.executable,
     }
     config = ConfigParser()
     config.add_section('egg_info')
@@ -98,7 +98,6 @@ def get_defaults():
 def main(argv=sys.argv[1:]):
     opts = get_defaults()
     parser = OptionParser(usage='usage: ./configure [options] [VAR=VAL...]')
-    parser.add_option('--python', default=sys.executable, help='python interpreter [default: %default]')
     parser.add_option('--lapack', default=opts.get('lapack'), help='build directory [default: %default]')
     parser.add_option('--fc', default=opts.get('fc'), help='Fortran compiler [default: %default]')
     parser.add_option('--mpifc', default=opts.get('mpifc'), help='MPI Fortran compiler [default: %default]')
