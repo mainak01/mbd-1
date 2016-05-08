@@ -2,6 +2,7 @@ all: libmbd.a
 
 libmbd.a: $(FOBJS)
 	@$(AR) -cr $@ $^
+	@rm -f $(wildcard lib*/_mbd_backend*)
 
 $(FOBJS): fcompile ;
 
