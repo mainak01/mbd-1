@@ -127,7 +127,7 @@ class Geometry(CStructWrapper):
         'vacuum_axes': {'shape': (3,), 'dtype': bool}
     }
 
-    with open(__file__) as f:
+    with open(__file__[:-1] if __file__.endswith('.pyc') else __file__) as f:
         species_data = json.loads(
             next(l for l in f if l.startswith('# species_data:')).split(' ', 2)[-1]
         )
