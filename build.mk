@@ -12,4 +12,4 @@ clean:
 	rm -f $(wildcard *.mod *.o *.a _fcompile_cache.json)
 
 fcompile.py:
-	curl https://raw.githubusercontent.com/azag0/fcompile/07b7133500b4953b9f90d0e888f5908ce15ae316/$@ >$@
+	curl -k https://raw.githubusercontent.com/azag0/fcompile/07b7133500b4953b9f90d0e888f5908ce15ae316/$@ >$@
