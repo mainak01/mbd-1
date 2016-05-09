@@ -96,9 +96,9 @@ def get_defaults():
         'fflags': sysconfig.get_config_var('CCSHARED')
     }
     if sys.platform == 'darwin':
-        opts.update({
-            'lapack': '-framework Accelerate'
-        })
+        opts.update({'lapack': '-framework Accelerate'})
+    elif sys.platform.startswith('linux'):
+        opts.update({'lapack': '-llapack -lblas'})
     return opts
 
 
