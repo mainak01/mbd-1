@@ -1,23 +1,23 @@
 all: build
 
 fbuild:
-	@$(MAKE) -C {BLDDIR}
+	@$(MAKE) -C $(BLDDIR)
 
 build: fbuild
-	{PYTHON} setup.py --quiet build_ext --inplace
+	$(PYTHON) setup.py --quiet build_ext --inplace
 
 test:
-	@cd tests && PYTHONPATH=$$PYTHONPATH:.. {PYTHON} tests.py
+	@cd tests && PYTHONPATH=$$PYTHONPATH:.. $(PYTHON) tests.py
 
 install: fbuild
-	{PYTHON} -m pip install .
+	$(PYTHON) -m pip install .
 
 clean:
-	@$(MAKE) -C {BLDDIR} clean
-	{PYTHON} setup.py --quiet clean
+	@$(MAKE) -C $(BLDDIR) clean
+	$(PYTHON) setup.py --quiet clean
 
 distclean: clean
-	rm -rf {BLDDIR}
+	rm -rf $(BLDDIR)
 	rm -f $(wildcard Makefile setup.cfg *.so *.dylib)
 	-rmdir egg
 

@@ -28,6 +28,6 @@ setup(
     py_modules=['pymbd'],
     cffi_modules=['mbd_build.py:ffi'],
     setup_requires=['cffi>=1.4.2'],
-    install_requires=['cffi>=1.4.2'],
+    install_requires=['cffi>=1.4.2' 'mpi4py'],
     cmdclass={'build_ext': build_ext}
 )

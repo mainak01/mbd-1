@@ -27,7 +27,23 @@ def cd(path):
         os.chdir(cwd)
 
 
-def configure(opts):
+def write_env(env, f):
+    for varname, value in env.items():
+        f.write('{0} = {1}\n'.format(varname, value))
+    f.write('\n')
+
+
+def configure(opts, env):
+    config = ConfigParser()
+    config.add_section('egg_info')
+    config.set('egg_info', 'egg-base', 'egg')
+    if not os.path.isdir('egg'):
+        os.mkdir('egg')
+    config.add_section('cffi')
+    config.set('cffi', 'lapack', opts.lapack)
+    config.set('cffi', 'library-dirs', blddir)
+    config.add_section('fortran')
+    config.set('fortran', 'mpifc', opts.mpifc)
     with cd('src'):
         fortran_files = glob('*.f90')
     srcdir_rel = os.path.relpath('src', blddir)
@@ -44,39 +60,30 @@ def configure(opts):
             fc = opts.fc
         fortran_tasks[filename] = {
             'source': filepath,
-            'args': [fc, '-c', '-o', objfile] + opts.fflags.split()
+            'args': fc.split() + ['-c', '-o', objfile] + opts.fflags.split()
         }
-    env = {
-        'FOBJS': ' '.join(fobjs),
-        'BLDDIR': blddir,
-        'VPATH': srcdir_rel,
-        'PYTHON': sys.executable,
-    }
-    config = ConfigParser()
-    config.add_section('egg_info')
-    config.set('egg_info', 'egg-base', 'egg')
-    if not os.path.isdir('egg'):
-        os.mkdir('egg')
-    config.add_section('cffi')
-    config.set('cffi', 'lapack', opts.lapack)
-    config.set('cffi', 'library-dirs', blddir)
-    config.add_section('fortran')
-    config.set('fortran', 'mpifc', opts.mpifc)
     with open('Makefile.in') as f:
         makefile = f.read()
+    env.update({
+        'BLDDIR': blddir,
+        'PYTHON': sys.executable,
+    })
     with open('Makefile', 'w') as f:
         f.write('# Generated automatically by ./configure from Makefile.in\n\n')
-        f.write(makefile.format(**env))
+        write_env(env, f)
+        f.write(makefile)
     if not os.path.isdir(blddir):
         os.mkdir(blddir)
     with open('setup.cfg', 'w') as f:
         config.write(f)
     with open('build.mk') as f:
         makefile = f.read()
+    env = {
+        'FOBJS': ' '.join(fobjs),
+        'VPATH': srcdir_rel,
+    }
     with open(os.path.join(blddir, 'Makefile'), 'w') as f:
-        for varname, value in env.items():
-            f.write('{0} = {1}\n'.format(varname, value))
-        f.write('\n')
+        write_env(env, f)
         f.write(makefile)
     with open(os.path.join(blddir, 'fcompile.json'), 'w') as f:
         json.dump(fortran_tasks, f)
@@ -104,9 +111,8 @@ def main(argv=sys.argv[1:]):
     parser.add_option('--fflags', default=opts.get('fflags'), help='Fortran flags [default: %default]')
     opts, args = parser.parse_args(argv)
     assert opts.lapack
-    for var, val in (arg.split('=', 1) for arg in args):
-        os.environ[var] = val
-    configure(opts)
+    env = dict(arg.split('=', 1) for arg in args)
+    configure(opts, env)
 
 
 config_status = """\
